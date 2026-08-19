@@ -1,0 +1,6 @@
+*.pkg.tar.zst
+*.tar.xz
+ck.patch
+src/
+pkg/
+.DS_Store
