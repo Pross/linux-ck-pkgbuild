@@ -87,6 +87,45 @@ Rather than polling commits, use GitHub's native release notifications:
   - BTF/`vmlinux`, `tools/bpf/bpftool` build, Rust support
   - non-x86_64 arch handling
 
+## Known issue: v7.2-ck1 fails to build with CONFIG_PSI=y
+
+Confirmed on real hardware (not emulation), reproduced twice from a clean
+build: compiling against `linux-7.2` + the `v7.2-ck1` diff fails in
+`kernel/sched/build_muqss.c`:
+
+```
+kernel/sched/psi.c: In function 'psi_account_irqtime':
+kernel/sched/psi.c:1025:33: error: 'struct rq' has no member named 'psi_irq_time'; did you mean 'prev_irq_time'?
+```
+
+**Root cause:** `build_muqss.c` does `#include "psi.c"` under
+`#ifdef CONFIG_PSI`, pulling in vanilla `psi.c` unmodified. Vanilla `psi.c`
+references `rq->psi_irq_time` (added by upstream's 2022 PSI-IRQ-tracking
+commit). The -ck diff's changes to `struct rq` never add that field — it only
+carries MuQSS's own long-standing, separately-named `prev_irq_time` field,
+used by MuQSS's own irq-time accounting. The two were never reconciled, so
+**any build with `CONFIG_PSI=y` fails**, including Arch's stock desktop
+config (`CONFIG_PSI` defaults off in vanilla Kconfig — no `default` line —
+which is almost certainly why this hasn't been widely reported: most people
+testing -ck likely don't have PSI enabled).
+
+Verified this isn't an artifact of how this repo builds the patch (three-dot
+GitHub compare, resolved merge-base checked directly against the `v7.2` tag's
+actual commit — they match) and isn't a stale-config issue either (checked
+against Arch's real, current `linux` package `PKGBUILD`, which builds the
+same way we do: `cp config; make olddefconfig`, no PSI-specific handling).
+
+Reported: [comment on the linux-7.2-ck1 announcement](https://ck-hack.blogspot.com/2026/08/linux-72-ck1-muqss-v0310-for-linux-72.html)
+(issues are disabled on `ckolivas/linux`, so the blog is the live channel).
+
+Two ways this resolves:
+- **Con fixes it in a ck2+ release** — this repo's daily Action already
+  tracks the latest ck tag automatically, so nothing changes here; the next
+  run just picks up the fix.
+- **Told to build with `CONFIG_PSI=n`** — would mean patching the stock Arch
+  config in `scripts/update-pkgbuild.sh` before `olddefconfig` runs (e.g.
+  `scripts/config --disable PSI` in `prepare()`), which isn't done yet.
+
 ## Manual run
 
 ```bash
