@@ -25,12 +25,15 @@ A daily GitHub Action (`.github/workflows/update-pkgbuild.yml`) does:
    tag ck branched from (`v7.2`), never the point release — point releases
    only exist on the separate linux-stable tree, not as tags on
    `torvalds/linux`, so `v7.2` is the only valid compare anchor either way.
-   The diff is applied on top of the point-release tarball in `prepare()`,
-   which is where the "may not apply cleanly" caveat below actually bites.
 3. Pulls that point release's published sha256 from kernel.org, and computes
    the small ck diff's sha256 itself (ck doesn't publish checksums).
-4. Pulls Arch's current base kernel `config.x86_64` from their packaging repo.
-5. Renders `PKGBUILD` from `PKGBUILD.template` — `pkgver` is
+4. **Downloads the point-release tarball and dry-run applies the ck diff
+   against it** (`patch -Np1 --dry-run`) before touching `PKGBUILD` at all.
+   If it doesn't apply cleanly, the script fails here and nothing gets
+   committed — see the caveat below for why this can happen and what it
+   means when it does.
+5. Pulls Arch's current base kernel `config.x86_64` from their packaging repo.
+6. Renders `PKGBUILD` from `PKGBUILD.template` — `pkgver` is
    `<kernel.org point release>.<ck revision>`, e.g. `7.2.3.ck1` — and commits
    it straight to `main` if anything changed.
 
@@ -40,11 +43,13 @@ A daily GitHub Action (`.github/workflows/update-pkgbuild.yml`) does:
   tag it branched from (`v7.2`), but it's applied on top of whatever the
   newest point release is (`7.2.3`'s tarball, not `7.2`'s). If a point
   release's own upstream bugfixes touch the same files ck's diff does,
-  `patch -Np1` in `prepare()` can fail or apply with fuzz. This gets more
-  likely the further kernel.org drifts from ck's original branch point. The
-  workflow doesn't attempt an actual `makepkg` build — it only regenerates
-  the recipe. Treat every auto-commit as unverified until you've actually
-  built it.
+  `patch -Np1` can fail or apply with fuzz. This gets more likely the further
+  kernel.org drifts from ck's original branch point. Step 4 above catches
+  this with a real dry-run against the real tarball before any commit
+  happens, so a failure here means the Action goes red (no silent bad
+  commit) — check the run log for which hunks failed and why. This is still
+  a dry-run of `prepare()`, not a full `makepkg` build (see below), so
+  config/build-time issues past that point aren't caught.
 - **No CI build/test.** Adding a real build step would need an Arch container
   and a lot more time/resources than a free-tier Actions runner budget allows
   for a full kernel compile on a schedule. If you want that, it belongs in a
@@ -72,9 +77,12 @@ A daily GitHub Action (`.github/workflows/update-pkgbuild.yml`) does:
 ## Manual run
 
 ```bash
-jq --version && envsubst --version   # deps: jq, gettext-base
+jq --version && envsubst --version && patch --version   # deps: jq, gettext-base, patch
 bash scripts/update-pkgbuild.sh
 ```
+
+Downloads the full kernel tarball to verify the patch applies — expect this to
+take a minute or two and use ~200MB of temp disk space (cleaned up on exit).
 
 ## Building the package yourself
 

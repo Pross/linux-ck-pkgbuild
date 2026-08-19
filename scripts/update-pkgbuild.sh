@@ -85,6 +85,24 @@ if [[ "$patch_size" -lt 100 ]]; then
 fi
 echo "Patch fetched: $patch_size bytes"
 
+verify_dir="$(mktemp -d)"
+trap 'rm -rf "$verify_dir"' EXIT
+
+echo "Downloading kernel tarball to verify the patch actually applies (same tarball a real build needs anyway)..."
+curl -sfL "$kernel_url" -o "$verify_dir/linux-${kver}.tar.xz"
+echo "${kernel_sha256}  ${verify_dir}/linux-${kver}.tar.xz" | sha256sum -c -
+
+echo "Extracting..."
+tar -C "$verify_dir" -xf "$verify_dir/linux-${kver}.tar.xz"
+
+echo "Dry-run applying ck diff against linux-${kver}..."
+if ! patch -Np1 --dry-run -d "$verify_dir/linux-${kver}" < ck.patch > "$verify_dir/patch-dryrun.log" 2>&1; then
+  echo "ck diff does NOT apply cleanly against linux-${kver} -- refusing to update PKGBUILD. Dry-run output:" >&2
+  cat "$verify_dir/patch-dryrun.log" >&2
+  exit 1
+fi
+echo "Patch verified: applies cleanly against linux-${kver}"
+
 pkgver="${kver}.${ckrel}"
 
 rm -f ck.patch
