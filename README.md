@@ -36,6 +36,19 @@ A daily GitHub Action (`.github/workflows/update-pkgbuild.yml`) does:
 6. Renders `PKGBUILD` from `PKGBUILD.template` — `pkgver` is
    `<kernel.org point release>.<ck revision>`, e.g. `7.2.3.ck1` — and commits
    it straight to `main` if anything changed.
+7. If (and only if) that commit happened, tags it `v<pkgver>` and creates a
+   GitHub Release with `PKGBUILD` + `config` attached, so you can grab a
+   given version's exact files without cloning.
+
+## Subscribing to updates
+
+Rather than polling commits, use GitHub's native release notifications:
+
+- **Watch → Custom → Releases** on the repo page for notifications whenever
+  a new version ships (only fires when something actually changed, per the
+  no-op check in step 6/7 above).
+- Or subscribe to `https://github.com/Pross/linux-ck-pkgbuild/releases.atom`
+  in any RSS/Atom reader.
 
 ## Important caveats
 

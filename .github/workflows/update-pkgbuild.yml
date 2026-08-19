@@ -21,14 +21,34 @@ jobs:
         run: bash scripts/update-pkgbuild.sh
 
       - name: Commit and push if changed
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add PKGBUILD config
           if git diff --cached --quiet; then
             echo "No changes."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           pkgver="$(grep -m1 '^pkgver=' PKGBUILD | cut -d= -f2)"
           git commit -m "chore: update linux-ck PKGBUILD to ${pkgver}"
           git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "pkgver=${pkgver}" >> "$GITHUB_OUTPUT"
+
+      - name: Tag release
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pkgver="${{ steps.commit.outputs.pkgver }}"
+          tag="v${pkgver}"
+          kernel_src="$(grep -o 'https://cdn\.kernel\.org[^"]*' PKGBUILD | head -1)"
+          patch_src="$(grep -o 'https://github\.com/ckolivas/linux/compare/[^"]*' PKGBUILD | head -1)"
+          notes="$(printf 'Auto-generated PKGBUILD update.\n\n- pkgver: %s\n- kernel source: %s\n- ck patch: %s\n' "$pkgver" "$kernel_src" "$patch_src")"
+
+          gh release create "$tag" PKGBUILD config \
+            --title "linux-ck $pkgver" \
+            --target main \
+            --notes "$notes"
