@@ -47,16 +47,21 @@ jobs:
           git push
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Publish a release per changed line
-        if: steps.commit.outputs.changed == 'true'
+      - name: Publish any line missing a release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Reconciles releases against the manifest rather than firing only on
+          # a commit: a line whose files are already committed but whose release
+          # never got created would otherwise stay unpublished forever, since
+          # the generator skips lines that are already at their pkgver. The
+          # "already exists" check below makes this idempotent.
+          [ -s .build-manifest ] || { echo "No manifest, nothing to publish."; exit 0; }
+
           # Only the highest kernel version is marked Latest. ck publishes older
           # lines after newer ones, so this is set explicitly rather than left to
           # GitHub's default of "most recently published wins".
           while IFS=$'\t' read -r line pkgver primary changed; do
-            [ "$changed" = "1" ] || continue
             tag="v${pkgver}"
 
             if gh release view "$tag" >/dev/null 2>&1; then
