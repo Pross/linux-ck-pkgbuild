@@ -29,7 +29,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A PKGBUILD config ck.patch lines
+          # Whole tree rather than a pathspec list: the root ck.patch only
+          # exists when the primary line has no compare base, and naming a
+          # path that is neither present nor tracked is a fatal error.
+          # .gitignore keeps run state and local notes out.
+          git add -A
           if git diff --cached --quiet; then
             echo "No changes."
             echo "changed=false" >> "$GITHUB_OUTPUT"
