@@ -1,6 +1,11 @@
 *.pkg.tar.zst
 *.tar.xz
-ck.patch
 src/
 pkg/
 .DS_Store
+
+# Per-run state, not an artifact.
+.build-manifest
+
+# Working notes and plans — kept local, this repo is public.
+agents/

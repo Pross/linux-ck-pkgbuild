@@ -17,7 +17,11 @@ jobs:
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y jq gettext-base patch
 
-      - name: Regenerate PKGBUILD
+      - name: Regenerate PKGBUILDs
+        env:
+          # Anonymous source-tarball downloads get rate limited; the script uses
+          # this when it has to compute a diff locally.
+          GH_TOKEN: ${{ github.token }}
         run: bash scripts/update-pkgbuild.sh
 
       - name: Commit and push if changed
@@ -25,30 +29,59 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add PKGBUILD config
+          git add -A PKGBUILD config ck.patch lines
           if git diff --cached --quiet; then
             echo "No changes."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          pkgver="$(grep -m1 '^pkgver=' PKGBUILD | cut -d= -f2)"
-          git commit -m "chore: update linux-ck PKGBUILD to ${pkgver}"
+
+          # Subject names the primary line; the body lists every line that moved.
+          primary="$(awk -F'\t' '$3 == 1 { print $2 }' .build-manifest)"
+          moved="$(awk -F'\t' '$4 == 1 { printf "- %s -> %s\n", $1, $2 }' .build-manifest)"
+          git commit -m "chore: update linux-ck PKGBUILD to ${primary}" -m "$moved"
           git push
           echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "pkgver=${pkgver}" >> "$GITHUB_OUTPUT"
 
-      - name: Tag release
+      - name: Publish a release per changed line
         if: steps.commit.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pkgver="${{ steps.commit.outputs.pkgver }}"
-          tag="v${pkgver}"
-          kernel_src="$(grep -o 'https://cdn\.kernel\.org[^"]*' PKGBUILD | head -1)"
-          patch_src="$(grep -o 'https://github\.com/ckolivas/linux/compare/[^"]*' PKGBUILD | head -1)"
-          notes="$(printf 'Auto-generated PKGBUILD update.\n\n- pkgver: %s\n- kernel source: %s\n- ck patch: %s\n' "$pkgver" "$kernel_src" "$patch_src")"
+          # Only the highest kernel version is marked Latest. ck publishes older
+          # lines after newer ones, so this is set explicitly rather than left to
+          # GitHub's default of "most recently published wins".
+          while IFS=$'\t' read -r line pkgver primary changed; do
+            [ "$changed" = "1" ] || continue
+            tag="v${pkgver}"
 
-          gh release create "$tag" PKGBUILD config \
-            --title "linux-ck $pkgver" \
-            --target main \
-            --notes "$notes"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "Release $tag already exists, skipping."
+              continue
+            fi
+
+            assets="lines/${line}/PKGBUILD lines/${line}/config"
+            [ -f "lines/${line}/ck.patch" ] && assets="$assets lines/${line}/ck.patch"
+
+            kernel_src="$(grep -o 'https://cdn\.kernel\.org[^"]*' "lines/${line}/PKGBUILD" | head -1)"
+            patch_src="$(grep -o 'https://github\.com/ckolivas/linux/compare/[^"]*' "lines/${line}/PKGBUILD" | head -1)"
+            [ -n "$patch_src" ] || patch_src="shipped alongside this release (no compare base for this tag)"
+
+            if [ "$primary" = "1" ]; then
+              latest_flag="--latest"
+              note_line="This is the newest kernel line."
+            else
+              latest_flag="--latest=false"
+              note_line="Older kernel line, kept updated but not the newest available."
+            fi
+
+            notes="$(printf 'Auto-generated PKGBUILD update for the %s line.\n\n%s\n\n- pkgver: %s\n- kernel source: %s\n- ck patch: %s\n' \
+              "$line" "$note_line" "$pkgver" "$kernel_src" "$patch_src")"
+
+            # shellcheck disable=SC2086
+            gh release create "$tag" $assets \
+              --title "linux-ck $pkgver" \
+              --target main \
+              $latest_flag \
+              --notes "$notes"
+          done < .build-manifest
