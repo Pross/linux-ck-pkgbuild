@@ -40,6 +40,14 @@ ck_tarball_api="https://api.github.com/repos/ckolivas/linux/tarball"
 # in, not ck's patch -- fail rather than commit it.
 max_patch_bytes=$((3 * 1024 * 1024))
 
+# Unauthenticated GitHub API calls are capped at 60/hr per IP, shared across
+# every other job on the runner pool -- easy to exhaust. Sent with every
+# api.github.com request, not just the tarball fetch, to actually get the
+# 5000/hr authenticated limit.
+gh_token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+gh_auth=()
+[[ -n "$gh_token" ]] && gh_auth=(-H "Authorization: Bearer $gh_token")
+
 manifest="$repo_root/.build-manifest"
 : > "$manifest"
 
@@ -49,7 +57,7 @@ trap 'rm -rf "$work_dir"' EXIT
 # ---------------------------------------------------------------- line picking
 
 echo "Fetching ck releases..."
-releases_json="$(curl -sfL -H 'Accept: application/vnd.github+json' "$ck_releases_api")"
+releases_json="$(curl -sfL "${gh_auth[@]}" -H 'Accept: application/vnd.github+json' "$ck_releases_api")"
 
 # tag -> "<line> <kbase> <ckrev> <tag>", skipping anything not vX.Y[.Z]-ckN
 candidates="$(
@@ -110,13 +118,9 @@ fetch_compare_diff() {
 # retries since a 429 is transient.
 fetch_ck_tarball() {
   local ck_tag="$1" out="$2"
-  local token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
-  local -a auth=()
-  [[ -n "$token" ]] && auth=(-H "Authorization: Bearer $token")
-
   local attempt code
   for attempt in 1 2 3; do
-    code="$(curl -sL "${auth[@]}" -o "$out" -w '%{http_code}' "${ck_tarball_api}/${ck_tag}")"
+    code="$(curl -sL "${gh_auth[@]}" -o "$out" -w '%{http_code}' "${ck_tarball_api}/${ck_tag}")"
     if [[ "$code" == "200" ]]; then
       return 0
     fi
