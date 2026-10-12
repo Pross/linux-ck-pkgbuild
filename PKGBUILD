@@ -93,7 +93,8 @@ package_linux-ck-headers() {
   install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
 
   cp -t "$builddir" -a scripts
-  install -Dt "$builddir/include" -a include/*
+  mkdir -p "$builddir/include"
+  cp -t "$builddir/include" -a include/*
   cp -t "$builddir/arch/x86" -a arch/x86/include
 
   echo "Adding symlink..."
