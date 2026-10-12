@@ -12,12 +12,22 @@ version order. `v7.1.9-ck3` shipped on 2026-08-20, three days *after* `v7.2-ck1`
 So GitHub's `releases/latest` — which means most recently *published* — would
 have moved this package backwards from 7.2 to 7.1.9.
 
+ck pushes **tags**, not GitHub releases, so lines are discovered from
+`git ls-remote --tags` on `ckolivas/linux`. Only `vX.Y[.Z]-ckN` tags count, and
+anything below `ck_min_line` (set at the top of the script) is ignored, so ck's
+old longterm tags don't become lines.
+
 A **line** is `major.minor`. Within a line only the newest ck revision is
 packaged, ranked by base version first and ck revision second, so line `7.1`
 resolves to `v7.1.9-ck3` rather than `v7.1-ck3`. The highest kernel version
 across all lines is the **primary**.
 
 - Each line is rendered to `lines/<line>/` and released as `v<pkgver>`.
+- Each line is also pushed to its own **branch** (`7.1`, `7.2`, ...) holding just
+  that line's `PKGBUILD`, `config` and `ck.patch` at the root, by
+  `scripts/publish-line-branches.sh`. `git checkout 7.2 && makepkg -si` builds
+  that line. A new line's branch appears once ck tags it and kernel.org has the
+  base release.
 - The primary line is also copied to the repo root, so `makepkg -si` in a fresh
   clone still builds the newest kernel.
 - Only the primary release is marked **Latest**. Older lines stay fetchable but
@@ -26,11 +36,12 @@ across all lines is the **primary**.
 
 ### What a run does, per line
 
-1. Resolves the newest kernel.org **point release** for that line via
-   `https://www.kernel.org/releases.json` — `7.2.3` if that is current, just
-   `7.2` if kernel.org has not shipped one yet. kernel.org keeps shipping
-   bugfixes long after ck stops tagging, so this is what keeps a line from
-   silently going stale.
+1. Picks the kernel version. For a `major.minor` ck tag (`v7.2-ck1`) that is the
+   newest kernel.org **point release** via `https://www.kernel.org/releases.json`
+   — `7.2.3` if that is current, just `7.2` if kernel.org has not shipped one
+   yet. For a **point-release** ck tag (`v7.2.10-ck1`) it is exactly that base
+   (`7.2.10`): the diff is computed against that tree, so applying it to a newer
+   point release would revert the stable fixes in between.
 2. Skips the line entirely if `lines/<line>/PKGBUILD` already sits at the
    computed `pkgver` — checked before any download, so a run with nothing to do
    costs under a second.
@@ -108,10 +119,10 @@ Rather than polling commits, use GitHub's native release notifications:
   — check the run log for which hunks failed. This is still a dry-run of
   `prepare()`, not a full `makepkg` build, so config/build-time issues past that
   point aren't caught.
-- **One line failing fails the whole run.** The script exits on the first line
-  whose patch won't apply, so a broken older line blocks a good primary from
-  being published that day. Acceptable while ck maintains two lines; worth
-  revisiting if that grows.
+- **A failing line is skipped, not fatal.** Each line runs in its own subshell;
+  one whose patch won't apply is logged and the others still publish. The script
+  then exits non-zero and the workflow's last step fails, so the run still goes
+  red. A failed line keeps its last good files.
 - **No CI build/test.** Adding a real build step would need an Arch container
   and a lot more time/resources than a free-tier Actions runner budget allows
   for a full kernel compile on a schedule. If you want that, it belongs in a
@@ -170,9 +181,12 @@ Reported: [comment on the linux-7.2-ck1 announcement](https://ck-hack.blogspot.c
 (issues are disabled on `ckolivas/linux`, so the blog is the live channel).
 
 **Status (2026-08-20):** Con reproduced it using the stock Arch config and has
-pushed a fix to the `7.2-ck` branch — but has **not tagged a ck2**. This repo
-only ever consumes releases, so nothing picks the fix up until he cuts one. When
-he does, the daily Action takes it automatically with no change here.
+pushed a fix to the `7.2-ck` branch.
+
+**Update (2026-10-12):** he tagged it as `v7.2.10-ck1` (same commit as the
+`7.2-ck` branch head). The generator used to read GitHub releases, which never
+showed that tag, so it kept rebasing `v7.2-ck1` and failing; it now reads tags
+and picks `v7.2.10-ck1` up. Not yet confirmed by a full `makepkg` build.
 
 The fallback, if a fix never lands, is building with `CONFIG_PSI=n` — patching
 the stock Arch config before `olddefconfig` runs (e.g. `scripts/config --disable
@@ -218,7 +232,8 @@ self-contained:
 cd lines/7.1 && makepkg -si
 ```
 
-Or download a release's attached `PKGBUILD`, `config` (and `ck.patch`, if
+Or check out the line's branch (`git checkout 7.1 && makepkg -si`), or download a
+release's attached `PKGBUILD`, `config` (and `ck.patch`, if
 present) into one directory and build there.
 
 Do this in a clean Arch chroot/container, not on a production machine, until
