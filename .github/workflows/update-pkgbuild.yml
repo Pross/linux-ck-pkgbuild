@@ -18,6 +18,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq gettext-base patch
 
       - name: Regenerate PKGBUILDs
+        id: generate
+        # A failing line must not stop the others from publishing; the final
+        # step turns this into a red run.
+        continue-on-error: true
         env:
           # Anonymous source-tarball downloads get rate limited; the script uses
           # this when it has to compute a diff locally.
@@ -41,11 +45,14 @@ jobs:
           fi
 
           # Subject names the primary line; the body lists every line that moved.
-          primary="$(awk -F'\t' '$3 == 1 { print $2 }' .build-manifest)"
+          primary="$(awk -F'\t' '$3 == 1 { print $2 }' .build-manifest | head -n1)"
           moved="$(awk -F'\t' '$4 == 1 { printf "- %s -> %s\n", $1, $2 }' .build-manifest)"
-          git commit -m "chore: update linux-ck PKGBUILD to ${primary}" -m "$moved"
+          git commit -m "chore: update linux-ck PKGBUILD to ${primary:-several lines}" -m "$moved"
           git push
           echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish per-line branches
+        run: bash scripts/publish-line-branches.sh
 
       - name: Publish any line missing a release
         env:
@@ -94,3 +101,9 @@ jobs:
               $latest_flag \
               --notes "$notes"
           done < .build-manifest
+
+      - name: Fail the run if a line failed
+        if: steps.generate.outcome == 'failure'
+        run: |
+          echo "A kernel line failed to regenerate; see the Regenerate step log." >&2
+          exit 1
