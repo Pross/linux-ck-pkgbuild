@@ -93,13 +93,7 @@ package_linux-ck-headers() {
   install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
 
   cp -t "$builddir" -a scripts
-
-  # required to build modules against the kernel (objtool) and when BTF modules are enabled
-  install -Dt "$builddir/tools/objtool" tools/objtool/objtool
-  install -Dt "$builddir/tools/bpf/resolve_btfids" tools/bpf/resolve_btfids/resolve_btfids
-
-  mkdir -p "$builddir/include"
-  cp -t "$builddir/include" -a include/*
+  install -Dt "$builddir/include" -a include/*
   cp -t "$builddir/arch/x86" -a arch/x86/include
 
   echo "Adding symlink..."
