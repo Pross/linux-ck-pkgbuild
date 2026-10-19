@@ -9,3 +9,6 @@ pkg/
 
 # Working notes and plans — kept local, this repo is public.
 agents/
+
+# Local kernel configs selected with CK_CONFIG=<file> makepkg
+config-*

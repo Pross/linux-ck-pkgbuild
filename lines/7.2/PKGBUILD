@@ -45,9 +45,12 @@ prepare() {
   echo "${pkgbase#linux}" > localversion.20-pkgname
 
   echo "Setting config..."
-  cp "$srcdir/config" .config
+  # CK_CONFIG=<file in the PKGBUILD dir> swaps in a local config (e.g. config-nitro)
+  local _config="$srcdir/config"
+  [[ -n $CK_CONFIG ]] && _config="$startdir/$CK_CONFIG"
+  cp "$_config" .config
   make olddefconfig
-  diff -u "$srcdir/config" .config || :
+  diff -u "$_config" .config || :
 
   make -s kernelrelease > version
   echo "Prepared $pkgbase version $(<version)"
@@ -93,7 +96,13 @@ package_linux-ck-headers() {
   install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
 
   cp -t "$builddir" -a scripts
-  install -Dt "$builddir/include" -a include/*
+
+  # required to build modules against the kernel (objtool) and when BTF modules are enabled
+  install -Dt "$builddir/tools/objtool" tools/objtool/objtool
+  install -Dt "$builddir/tools/bpf/resolve_btfids" tools/bpf/resolve_btfids/resolve_btfids
+
+  mkdir -p "$builddir/include"
+  cp -t "$builddir/include" -a include/*
   cp -t "$builddir/arch/x86" -a arch/x86/include
 
   echo "Adding symlink..."
