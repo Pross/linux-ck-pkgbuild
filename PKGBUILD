@@ -6,7 +6,7 @@
 # targets "build a working -ck kernel + headers", not full upstream parity.
 pkgbase=linux-ck
 pkgname=(linux-ck linux-ck-headers)
-pkgver=7.3.ck1
+pkgver=7.3.1.ck1
 pkgrel=1
 pkgdesc='Linux kernel with Con Kolivas (-ck/MuQSS) scheduler and latency patches'
 arch=(x86_64)
@@ -14,18 +14,18 @@ url='https://github.com/ckolivas/linux'
 license=(GPL2)
 makedepends=(bc kmod libelf pahole cpio perl tar xz)
 options=(!strip)
-_srcname=linux-7.3
+_srcname=linux-7.3.1
 
 # The ck patch is fetched from GitHub's compare endpoint where one exists for
 # this tag, and shipped alongside this PKGBUILD where one doesn't -- see the
 # README on why point-release ck tags have no usable compare base.
 source=(
-  "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.3.tar.xz"
+  "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.3.1.tar.xz"
   "ck.patch::https://github.com/ckolivas/linux/compare/torvalds:v7.3...ckolivas:v7.3-ck1.diff"
   'config'
 )
 sha256sums=(
-  '87363c24f10e06321eb362765521094e94471f6bff8bce2d6b3e40f39f004953'
+  'fa595aad93734f829c963c2a90ef7c3673224fd7fdae7b49406e397cde2de231'
   '5c3de772c5ac3abd88ef2a2e7392503756e306f4e8267eeff30bb589aa8446e0'
   'SKIP'
 )
