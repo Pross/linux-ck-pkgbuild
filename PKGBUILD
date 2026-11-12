@@ -40,6 +40,15 @@ prepare() {
   echo "Applying ck patch..."
   patch -Np1 < "$srcdir/ck.patch"
 
+  # Apply any extra *.patch files sitting next to the PKGBUILD (sorted order).
+  # ck.patch is the downloaded/applied-above copy, so skip it.
+  local _extra
+  for _extra in "$startdir"/*.patch; do
+    [[ -f $_extra && ${_extra##*/} != ck.patch ]] || continue
+    echo "Applying extra patch ${_extra##*/}..."
+    patch -Np1 < "$_extra"
+  done
+
   echo "Setting version..."
   echo "-$pkgrel" > localversion.10-pkgrel
   echo "${pkgbase#linux}" > localversion.20-pkgname
